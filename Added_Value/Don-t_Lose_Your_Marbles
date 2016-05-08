@@ -1,0 +1,295 @@
+//Music Maker
+//Authors: Joshua Smith, Ryan Covington
+//This program reads in values from a 3-axis gyroscope
+//and uses the X-axis values to tilt a platic maze to run a marble through
+//
+//
+//The portion of this program related to setting up
+//and using the gyroscope was borrowed from the following
+//source: http://bildr.org/2011/06/l3g4200d-arduino/
+
+//Arduino 1.0+ only
+
+//Borrowed code//////////////////////////////////////////////////////////////
+
+#include <Wire.h>
+#include <Servo.h>
+Servo xservo; //x-axis standard servo
+Servo spinservo; //y-axis standard servo
+
+#define CTRL_REG1 0x20
+#define CTRL_REG2 0x21
+#define CTRL_REG3 0x22
+#define CTRL_REG4 0x23
+#define CTRL_REG5 0x24
+
+int L3G4200D_Address = 105; //I2C address of the L3G4200D
+
+int x; //x-axis gyroscope value
+int y; //y-axis gyroscope value
+int z; //z-axis gyroscope value
+int xout = 90; //motor x-axis value initialized to the middle position
+int xbase; //x-axis gyroscope base value
+int sens = 100; //sensitivity of controls
+int upper = 175; //upper limit of motor position
+int lower = 1; //lower limit of motor position
+bool clock = false;                   // clock that pulses true every millisecond
+bool game = false;                    // true if timer is going
+bool game_start = true;              // initializes timer when true
+bool end_seq = false;                 // flips board over when true
+int time1 = 0;                        // initial clock time
+int time2 = 0;                        // final clock time
+int timer = 0;                        // game timer
+int time = 3;                        // timer length in seconds
+int flip_over = 175;                  // location of servo flipped over
+int light_index =  0;                 // index of light array
+int song_index = 0;
+int middle = 90;                      // middle motor position
+int max_time = 30;                    // minimum time for timer
+int min_time = 5;                     // maximum time for timer
+
+int count = 0;     // tempo counter
+int note[] = {262, 277, 294, 311, 330, 349, 370, 392, 415, 440, 466, 494, 523};
+int song[] = {note[8], note[1], note[1], note[8], note[1], note[1], note[9], note[1],
+              note[8], note[1], note[1], note[8], note[1], note[1], note[9], note[1],
+              note[7], note[0], note[0], note[7], note[0], note[0], note[8], note[0],
+              note[7], note[0], note[0], note[7], note[0], note[0], note[8], note[0]
+             };
+
+//light flashing sequence
+int light[] = {1, 2, 4, 8, 9, 6, 9, 6, 8, 4, 2, 1, 10, 5, 10, 5};
+
+// Pin assignments
+int TILT_MOTOR = 2; // servo for maze tilting
+int SPIN_MOTOR = 3; // continuous servo for marble distribution
+int R_BUTTON = 4;  // right push button
+int L_BUTTON = 5;  // left push button
+int BUZZER = 6;    // buzzer to play music
+int LED0 = 7;      // LED #1
+int LED1 = 8;      // LED #2
+int LED2 = 9;      // LED #3
+int LED3 = 10;     // LED #4
+int POT = A0;      // potentiometer to control difficulty
+
+
+void setup() {
+
+  Wire.begin();
+  Serial.begin(9600);
+
+  Serial.println("starting up L3G4200D");
+  setupL3G4200D(2000); // Configure L3G4200  - 250, 500 or 2000 deg/sec
+
+  delay(1500); //wait for the sensor to be ready
+  getGyroValues(); //function that reads in the gyroscope data
+
+  //Calibrate the gyroscope from rest
+  xbase = x;
+
+  // Declare pins
+  pinMode(R_BUTTON, OUTPUT);
+  digitalWrite(R_BUTTON, HIGH);    // Activates pull-up resistor for right push button
+  pinMode(L_BUTTON, OUTPUT);
+  digitalWrite(L_BUTTON, HIGH);    // Activates pull-up resistor for left push button
+  pinMode(BUZZER, OUTPUT);
+  pinMode(LED0, OUTPUT);
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+  pinMode(LED3, OUTPUT);
+
+  xservo.attach(TILT_MOTOR); //xmotor on pin 2
+  xservo.write(xout);
+  spinservo.attach(SPIN_MOTOR); //continuous servo motor on pin 3
+  spinservo.write(93);
+}
+
+
+void loop() {
+
+  // pulses clock every 10 ms
+  time2 = millis();
+  if (time2 - time1 >= 10) {
+    time1 = time2;
+    clock = true;
+  } else {
+    clock = false;
+  }
+
+
+  // right push button
+  if (digitalRead(R_BUTTON) == 0) {
+    game = true;
+    //delay(80);  // prevents switch bounce
+  }
+
+  if (clock) {
+    //Serial.println(digitalRead(R_BUTTON));
+  }
+
+  // left push button
+  if (digitalRead(L_BUTTON) == 0) {
+
+    delay(80);  // prevents switch bounce
+  }
+
+  // time is controled by scaled potentiometer input value
+  time = min_time + (max_time - min_time) * analogRead(POT) / 1024;
+
+  // Clock dependent LED and music portion
+  if (game) {
+    // resets timer if game is just starting
+    if (game_start) {
+      timer = 0;
+      game_start = false;
+      spinservo.write(180);
+      delay(1000);
+      spinservo.write(93);
+    }
+
+    // ends game if timer runs out
+    if (timer >= time * 100) {
+      game_start = true;
+      game = false;
+      end_seq = true;
+    }
+
+    // in game code
+    if (clock) {
+      timer++;
+      Serial.println(bitRead(light[light_index], 0));
+      if (count > 25) {
+        tone(BUZZER, song[song_index]);
+        digitalWrite(LED0, bitRead(light[light_index], 0));
+        digitalWrite(LED1, bitRead(light[light_index], 1));
+        digitalWrite(LED2, bitRead(light[light_index], 2));
+        digitalWrite(LED3, bitRead(light[light_index], 3));
+        count = 0;
+
+        // song indexing
+        if (song_index < sizeof(song) / sizeof(int) - 1) {
+          song_index++;
+        } else {
+          song_index = 0;
+        }
+
+        //LED indexing
+        if (light_index < sizeof(light) / sizeof(int) - 1) {
+          light_index++;
+        } else {
+          light_index = 0;
+        }
+
+
+      }
+      count++;
+    }
+  } else {
+    noTone(BUZZER);
+  }
+
+  // prevents gyroscope values from changing too quickly
+  delay(10);
+
+  // This will update x, y, and z with new values
+  getGyroValues();
+
+  if (!end_seq) {
+    //Compares current x value to base value to see if
+    //x-axis motor should be moved
+    if (x > xbase + sens) {
+      xout = xout + 5;
+      //Prevents motor from rotating too far
+      if (xout > upper) {
+        xout = upper;
+      }
+      xservo.write(xout);
+    }
+
+    if (x < xbase - sens) {
+      xout = xout - 5;
+      //Prevents motor from rotating too far
+      if (xout < lower) {
+        xout = lower;
+      }
+      xservo.write(xout);
+    }
+  } else {
+    //end sequence here
+    tone(BUZZER, 500);
+    xservo.write(flip_over);
+    delay(1500);    //delay 2 seconds to allow board to flip over
+    noTone(BUZZER);
+    end_seq = false;
+    xservo.write(middle);
+    delay(1500);    //delay 2 seconds to allow board to flip over
+  }
+}
+
+//Borrowed function used to update gyroscope input values
+void getGyroValues() {
+
+  byte xMSB = readRegister(L3G4200D_Address, 0x29);
+  byte xLSB = readRegister(L3G4200D_Address, 0x28);
+  x = ((xMSB << 8) | xLSB);
+
+  byte yMSB = readRegister(L3G4200D_Address, 0x2B);
+  byte yLSB = readRegister(L3G4200D_Address, 0x2A);
+  y = ((yMSB << 8) | yLSB);
+
+  byte zMSB = readRegister(L3G4200D_Address, 0x2D);
+  byte zLSB = readRegister(L3G4200D_Address, 0x2C);
+  z = ((zMSB << 8) | zLSB);
+}
+
+int setupL3G4200D(int scale) {
+  //From  Jim Lindblom of Sparkfun's code
+
+  // Enable x, y, z and turn off power down:
+  writeRegister(L3G4200D_Address, CTRL_REG1, 0b00001111);
+
+  // If you'd like to adjust/use the HPF, you can edit the line below to configure CTRL_REG2:
+  writeRegister(L3G4200D_Address, CTRL_REG2, 0b00000000);
+
+  // Configure CTRL_REG3 to generate data ready interrupt on INT2
+  // No interrupts used on INT1, if you'd like to configure INT1
+  // or INT2 otherwise, consult the datasheet:
+  writeRegister(L3G4200D_Address, CTRL_REG3, 0b00001000);
+
+  // CTRL_REG4 controls the full-scale range, among other things:
+
+  if (scale == 250) {
+    writeRegister(L3G4200D_Address, CTRL_REG4, 0b00000000);
+  } else if (scale == 500) {
+    writeRegister(L3G4200D_Address, CTRL_REG4, 0b00010000);
+  } else {
+    writeRegister(L3G4200D_Address, CTRL_REG4, 0b00110000);
+  }
+
+  // CTRL_REG5 controls high-pass filtering of outputs, use it
+  // if you'd like:
+  writeRegister(L3G4200D_Address, CTRL_REG5, 0b00000000);
+}
+
+void writeRegister(int deviceAddress, byte address, byte val) {
+  Wire.beginTransmission(deviceAddress); // start transmission to device
+  Wire.write(address);       // send register address
+  Wire.write(val);         // send value to write
+  Wire.endTransmission();     // end transmission
+}
+
+int readRegister(int deviceAddress, byte address) {
+
+  int v;
+  Wire.beginTransmission(deviceAddress);
+  Wire.write(address); // register to read
+  Wire.endTransmission();
+
+  Wire.requestFrom(deviceAddress, 1); // read a byte
+
+  while (!Wire.available()) {
+    // waiting
+  }
+
+  v = Wire.read();
+  return v;
+}
