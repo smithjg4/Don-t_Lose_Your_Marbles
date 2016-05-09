@@ -1,7 +1,7 @@
-//Music Maker
+//Don't Lose Your Marbles!!!!!
 //Authors: Joshua Smith, Ryan Covington
 //This program reads in values from a 3-axis gyroscope
-//and uses the X-axis values to tilt a platic maze to run a marble through
+//and uses the X-axis values to tilt a platic maze to run a marble through.
 //
 //
 //The portion of this program related to setting up
@@ -10,12 +10,10 @@
 
 //Arduino 1.0+ only
 
-//Borrowed code//////////////////////////////////////////////////////////////
-
 #include <Wire.h>
 #include <Servo.h>
-Servo xservo; //x-axis standard servo
-Servo spinservo; //y-axis standard servo
+Servo xservo;       //x-axis standard servo
+Servo spinservo;    //y-axis standard servo
 
 #define CTRL_REG1 0x20
 #define CTRL_REG2 0x21
@@ -23,32 +21,36 @@ Servo spinservo; //y-axis standard servo
 #define CTRL_REG4 0x23
 #define CTRL_REG5 0x24
 
-int L3G4200D_Address = 105; //I2C address of the L3G4200D
+int L3G4200D_Address = 105;    // I2C address of the L3G4200D
+int x;                         // x-axis gyroscope value
+int y;                         // y-axis gyroscope value
+int z;                         // z-axis gyroscope value
+int flat = 45;                 // flat motor position
+int flip_over = 175;           // location of servo flipped over
+int xout = flat;               // motor x-axis value initialized to the flat position
+int xbase;                     // x-axis gyroscope base value
+int rest = 93;                 // rest position of continuous servo
 
-int x; //x-axis gyroscope value
-int y; //y-axis gyroscope value
-int z; //z-axis gyroscope value
-int xout = 90; //motor x-axis value initialized to the middle position
-int xbase; //x-axis gyroscope base value
-int sens = 100; //sensitivity of controls
-int upper = 175; //upper limit of motor position
-int lower = 1; //lower limit of motor position
-bool clock = false;                   // clock that pulses true every millisecond
-bool game = false;                    // true if timer is going
-bool game_start = true;              // initializes timer when true
-bool end_seq = false;                 // flips board over when true
-int time1 = 0;                        // initial clock time
-int time2 = 0;                        // final clock time
-int timer = 0;                        // game timer
-int time = 3;                        // timer length in seconds
-int flip_over = 175;                  // location of servo flipped over
-int light_index =  0;                 // index of light array
-int song_index = 0;
-int middle = 90;                      // middle motor position
-int max_time = 30;                    // minimum time for timer
-int min_time = 5;                     // maximum time for timer
+int sens = 150;                //sensitivity of controls
+int upper = 55;                //upper limit of motor position
+int lower = 35;                //lower limit of motor position
 
-int count = 0;     // tempo counter
+bool game = false;             // true if timer is going
+bool game_start = true;        // initializes timer when true
+bool end_seq = false;          // flips board over when true
+int time1 = 0;                 // initial clock time
+int time2 = 0;                 // final clock time
+int timer = 0;                 // game timer
+bool clock = false;            // clock that pulses true every millisecond
+
+int light_index =  0;          // index of light array
+int song_index = 0;            // index of song array
+
+int time = 5;                  // timer length in seconds
+int max_time = 30;             // minimum time for timer
+int min_time = 5;              // maximum time for timer
+
+int count = 0;                 // tempo counter
 int note[] = {262, 277, 294, 311, 330, 349, 370, 392, 415, 440, 466, 494, 523};
 int song[] = {note[8], note[1], note[1], note[8], note[1], note[1], note[9], note[1],
               note[8], note[1], note[1], note[8], note[1], note[1], note[9], note[1],
@@ -60,16 +62,15 @@ int song[] = {note[8], note[1], note[1], note[8], note[1], note[1], note[9], not
 int light[] = {1, 2, 4, 8, 9, 6, 9, 6, 8, 4, 2, 1, 10, 5, 10, 5};
 
 // Pin assignments
-int TILT_MOTOR = 2; // servo for maze tilting
-int SPIN_MOTOR = 3; // continuous servo for marble distribution
-int R_BUTTON = 4;  // right push button
-int L_BUTTON = 5;  // left push button
-int BUZZER = 6;    // buzzer to play music
-int LED0 = 7;      // LED #1
-int LED1 = 8;      // LED #2
-int LED2 = 9;      // LED #3
-int LED3 = 10;     // LED #4
-int POT = A0;      // potentiometer to control difficulty
+int TILT_MOTOR = 2;  // servo for maze tilting
+int SPIN_MOTOR = 3;  // continuous servo for marble distribution
+int R_BUTTON = 4;    // right push button
+int BUZZER = 6;      // buzzer to play music
+int LED0 = 7;        // LED #1
+int LED1 = 8;        // LED #2
+int LED2 = 9;        // LED #3
+int LED3 = 10;       // LED #4
+int POT = A0;        // potentiometer to control difficulty
 
 
 void setup() {
@@ -80,8 +81,8 @@ void setup() {
   Serial.println("starting up L3G4200D");
   setupL3G4200D(2000); // Configure L3G4200  - 250, 500 or 2000 deg/sec
 
-  delay(1500); //wait for the sensor to be ready
-  getGyroValues(); //function that reads in the gyroscope data
+  delay(1500);      //wait for the sensor to be ready
+  getGyroValues();  //function that reads in the gyroscope data
 
   //Calibrate the gyroscope from rest
   xbase = x;
@@ -89,18 +90,16 @@ void setup() {
   // Declare pins
   pinMode(R_BUTTON, OUTPUT);
   digitalWrite(R_BUTTON, HIGH);    // Activates pull-up resistor for right push button
-  pinMode(L_BUTTON, OUTPUT);
-  digitalWrite(L_BUTTON, HIGH);    // Activates pull-up resistor for left push button
   pinMode(BUZZER, OUTPUT);
   pinMode(LED0, OUTPUT);
   pinMode(LED1, OUTPUT);
   pinMode(LED2, OUTPUT);
   pinMode(LED3, OUTPUT);
 
-  xservo.attach(TILT_MOTOR); //xmotor on pin 2
-  xservo.write(xout);
-  spinservo.attach(SPIN_MOTOR); //continuous servo motor on pin 3
-  spinservo.write(93);
+  xservo.attach(TILT_MOTOR);    // tilt motor on pin 2
+  xservo.write(flat);           // initialize flat position
+  spinservo.attach(SPIN_MOTOR); // continuous servo motor on pin 3
+  spinservo.write(rest);          // initialize continuous servo at rest
 }
 
 
@@ -119,20 +118,9 @@ void loop() {
   // right push button
   if (digitalRead(R_BUTTON) == 0) {
     game = true;
-    //delay(80);  // prevents switch bounce
   }
 
-  if (clock) {
-    //Serial.println(digitalRead(R_BUTTON));
-  }
-
-  // left push button
-  if (digitalRead(L_BUTTON) == 0) {
-
-    delay(80);  // prevents switch bounce
-  }
-
-  // time is controled by scaled potentiometer input value
+  // Time is controled by scaled potentiometer input value
   time = min_time + (max_time - min_time) * analogRead(POT) / 1024;
 
   // Clock dependent LED and music portion
@@ -143,7 +131,7 @@ void loop() {
       game_start = false;
       spinservo.write(180);
       delay(1000);
-      spinservo.write(93);
+      spinservo.write(rest);
     }
 
     // ends game if timer runs out
@@ -156,7 +144,6 @@ void loop() {
     // in game code
     if (clock) {
       timer++;
-      Serial.println(bitRead(light[light_index], 0));
       if (count > 25) {
         tone(BUZZER, song[song_index]);
         digitalWrite(LED0, bitRead(light[light_index], 0));
@@ -195,7 +182,7 @@ void loop() {
 
   if (!end_seq) {
     //Compares current x value to base value to see if
-    //x-axis motor should be moved
+    //tilt motor should be moved
     if (x > xbase + sens) {
       xout = xout + 5;
       //Prevents motor from rotating too far
@@ -214,14 +201,15 @@ void loop() {
       xservo.write(xout);
     }
   } else {
-    //end sequence here
-    tone(BUZZER, 500);
-    xservo.write(flip_over);
-    delay(1500);    //delay 2 seconds to allow board to flip over
-    noTone(BUZZER);
-    end_seq = false;
-    xservo.write(middle);
-    delay(1500);    //delay 2 seconds to allow board to flip over
+
+    //end sequence
+    tone(BUZZER, 500);        // play beep
+    xservo.write(flip_over);  // flip maze over
+    delay(1500);              // delay 1.5 seconds to allow board to flip over
+    noTone(BUZZER);           // end beep
+    end_seq = false;          // reset end sequence
+    xservo.write(flat);       // reset maze
+    delay(1500);              //delay 1.5 seconds to allow board to flip over
   }
 }
 
