@@ -25,15 +25,15 @@ int L3G4200D_Address = 105;    // I2C address of the L3G4200D
 int x;                         // x-axis gyroscope value
 int y;                         // y-axis gyroscope value
 int z;                         // z-axis gyroscope value
-int flat = 45;                 // flat motor position
+int flat = 40;                 // flat motor position
 int flip_over = 175;           // location of servo flipped over
 int xout = flat;               // motor x-axis value initialized to the flat position
 int xbase;                     // x-axis gyroscope base value
 int rest = 93;                 // rest position of continuous servo
 
-int sens = 150;                //sensitivity of controls
-int upper = 55;                //upper limit of motor position
-int lower = 35;                //lower limit of motor position
+int sens = 175;                //sensitivity of controls
+int upper = 50;                //upper limit of motor position
+int lower = 30;                //lower limit of motor position
 
 bool game = false;             // true if timer is going
 bool game_start = true;        // initializes timer when true
@@ -52,10 +52,8 @@ int min_time = 5;              // maximum time for timer
 
 int count = 0;                 // tempo counter
 int note[] = {262, 277, 294, 311, 330, 349, 370, 392, 415, 440, 466, 494, 523};
-int song[] = {note[8], note[1], note[1], note[8], note[1], note[1], note[9], note[1],
-              note[8], note[1], note[1], note[8], note[1], note[1], note[9], note[1],
-              note[7], note[0], note[0], note[7], note[0], note[0], note[8], note[0],
-              note[7], note[0], note[0], note[7], note[0], note[0], note[8], note[0]
+int song[] = {note[2], note[2], note[9], note[2], note[10], note[2], note[9], note[2],
+              note[7], note[5], note[4], note[5], note[7], note[5], note[4], note[0]
              };
 
 //light flashing sequence
@@ -144,7 +142,7 @@ void loop() {
     // in game code
     if (clock) {
       timer++;
-      if (count > 25) {
+      if (count > 5) {
         tone(BUZZER, song[song_index]);
         digitalWrite(LED0, bitRead(light[light_index], 0));
         digitalWrite(LED1, bitRead(light[light_index], 1));
@@ -175,7 +173,7 @@ void loop() {
   }
 
   // prevents gyroscope values from changing too quickly
-  delay(10);
+  delay(20);
 
   // This will update x, y, and z with new values
   getGyroValues();
@@ -184,19 +182,24 @@ void loop() {
     //Compares current x value to base value to see if
     //tilt motor should be moved
     if (x > xbase + sens) {
-      xout = xout + 5;
+      xout = xout - 1;
       //Prevents motor from rotating too far
-      if (xout > upper) {
-        xout = upper;
+
+      if (xout < lower) {
+        xout = lower;
       }
       xservo.write(xout);
     }
 
+    Serial.println(xout);
+
     if (x < xbase - sens) {
-      xout = xout - 5;
+      xout = xout + 1;
       //Prevents motor from rotating too far
-      if (xout < lower) {
-        xout = lower;
+
+
+      if (xout > upper) {
+        xout = upper;
       }
       xservo.write(xout);
     }
